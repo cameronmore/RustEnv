@@ -1,12 +1,15 @@
 use std::collections::HashMap;
-use std::fs;
+use std::{fs, io};
+use std::io::{BufWriter, Write};
 
 fn main() {
     let contents = fs::read_to_string("Test.env").expect("unable to read file");
-    let new_env_map: HashMap<String, String> = process_dot_env(contents).expect("unable to parse env file");
+    let new_env_map: HashMap<String, String> =
+        process_dot_env(contents).expect("unable to parse env file");
     for (k, v) in new_env_map.iter() {
         println!("{} : {}", k, v);
     }
+    serialize_new_env("Dev.env".to_string(), new_env_map).expect("unable to serialize env");
 }
 
 // this and the the below type may be superflouous
@@ -49,12 +52,12 @@ fn parse_dot_env(tokens: Vec<EnvToken>) -> Result<EnvMap, String> {
     let mut new_env_map: EnvMap = EnvMap::new();
     let mut line_counter: i64 = 1;
     let mut character_counter: i64 = 1;
-    let mut current_key = EnvVar::new();
-    let mut current_value = EnvVal::new();
-    let mut expecting_key = true;
-    let mut expecting_value = false;
-    let mut in_a_comment = false;
-    let mut encountered_assignment = false;
+    let mut current_key: String = EnvVar::new();
+    let mut current_value: String = EnvVal::new();
+    let mut expecting_key: bool = true;
+    let mut expecting_value: bool = false;
+    let mut in_a_comment: bool = false;
+    let mut encountered_assignment: bool = false;
 
     for token in tokens {
         match token {
@@ -69,7 +72,9 @@ fn parse_dot_env(tokens: Vec<EnvToken>) -> Result<EnvMap, String> {
                         continue;
                     } else if !expecting_value {
                         // this case is when we finish parsing a value but get another character
-                        return Err(format!("encountered unexpected token, expected comment or new line at line {line_counter}, character {character_counter}"))
+                        return Err(format!(
+                            "encountered unexpected token, expected comment or new line at line {line_counter}, character {character_counter}"
+                        ));
                     }
                 }
             }
@@ -85,9 +90,15 @@ fn parse_dot_env(tokens: Vec<EnvToken>) -> Result<EnvMap, String> {
                     ));
                 }
 
-                if !current_key.is_empty() && !current_value.is_empty() && encountered_assignment && !in_a_comment {
+                if !current_key.is_empty()
+                    && !current_value.is_empty()
+                    && encountered_assignment
+                    && !in_a_comment
+                {
                     // this should be modified when we add quoote handling
-                    return Err(format!("encountered assignment operator at line {line_counter} character {character_counter}"))
+                    return Err(format!(
+                        "encountered assignment operator at line {line_counter} character {character_counter}"
+                    ));
                 }
 
                 if !in_a_comment {
@@ -106,10 +117,14 @@ fn parse_dot_env(tokens: Vec<EnvToken>) -> Result<EnvMap, String> {
                     continue;
                 }
                 if current_key.is_empty() && expecting_key {
-                    return Err(format!("expected key or comment symbol but encountered whitespace at line {line_counter} character {character_counter}"))
+                    return Err(format!(
+                        "expected key or comment symbol but encountered whitespace at line {line_counter} character {character_counter}"
+                    ));
                 }
                 if expecting_key {
-                    return Err(format!("expected key or assignment operator but encountered whitespace at line {line_counter} character {character_counter}"));
+                    return Err(format!(
+                        "expected key or assignment operator but encountered whitespace at line {line_counter} character {character_counter}"
+                    ));
                 }
                 if expecting_value {
                     expecting_value = false;
@@ -144,9 +159,10 @@ fn parse_dot_env(tokens: Vec<EnvToken>) -> Result<EnvMap, String> {
                 }
 
                 if (!current_key.is_empty() && current_value.is_empty()) && encountered_assignment {
-                    return Err(format!("expected assignment and value but only found key on line {line_counter}"));
+                    return Err(format!(
+                        "expected assignment and value but only found key on line {line_counter}"
+                    ));
                 }
-
 
                 // we have a few things to do on the new line token
                 // first, check whether the key and value are not empty strings
@@ -190,8 +206,23 @@ fn parse_dot_env(tokens: Vec<EnvToken>) -> Result<EnvMap, String> {
     return Ok(new_env_map);
 }
 
+/// fully reads and parses a `.env` file to return a map of non-empty key-value pairs
 pub fn process_dot_env(file_contents: String) -> Result<HashMap<String, String>, String> {
-    return parse_dot_env(lex_dot_env(file_contents))
+    return parse_dot_env(lex_dot_env(file_contents));
+}
+
+/// serializes a hash map to a file, overwriting it if it already exists.
+pub fn serialize_new_env(file_name: String, hash_map: EnvMap) -> Result<String, io::Error> {
+    // let file_path = file_name;
+    let file = fs::File::create(file_name.clone())?;
+    let mut writer = BufWriter::new(file);
+
+    for (k, v) in &hash_map {
+        let line = format!("{}={}\n", k, v);
+        writer.write_all(line.as_bytes())?;
+    }
+    writer.flush()?;
+    return Ok(format!("serialized to {}", file_name));
 }
 
 /*
