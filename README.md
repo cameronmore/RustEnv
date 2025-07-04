@@ -1,6 +1,6 @@
 # Rust Dot Env Parser
 
-This repository contains a relatively simple dotenv file parser. This project is being developed for educational purposes and should not be used in production.
+This repository contains a relatively simple dotenv file parser. This project is being developed for educational purposes and should not be used in production. Also note that the library on [crates.io](https://crates.io/crates/dotenv_lib) can be found [here](https://github.com/cameronmore/dotenv_lib)--this was the development repository for that library.
 
 ## dotenv Files
 
