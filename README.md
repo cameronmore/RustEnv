@@ -4,7 +4,7 @@ This repository contains a relatively simple dotenv file parser. This project is
 
 ## dotenv Files
 
-According to [dotenv.org](dotenv.org), `.env` files were introduced in 2012 and popularized in 2013 as a way for developers to store important environment variables / secrets / keys outside of source control (like Git).
+While the concept of environment variables is much older, the `.env` file syntax were introduced in 2012 and popularized in 2013 as a way for developers to store important environment variables / secrets / keys outside of source control (like Git) (at least, according to [dotenv](https://www.dotenv.org/)).
 
 An example file looks like the following:
 ```env
