@@ -19,7 +19,7 @@ type EnvMap = HashMap<EnvVar, EnvVal>;
 
 #[derive(Debug)]
 enum EnvToken {
-    Character(String),
+    Character(char),
     AssignmentOperator,
     NewLine,
     EOF,
@@ -36,7 +36,7 @@ fn lex_dot_env(file_contents: String) -> Vec<EnvToken> {
             ' ' => token_vec.push(EnvToken::Whitespace),
             '#' => token_vec.push(EnvToken::Comment),
             '\n' => token_vec.push(EnvToken::NewLine),
-            _ => token_vec.push(EnvToken::Character(char.to_string())),
+            _ => token_vec.push(EnvToken::Character(char)),
         }
     }
     token_vec.push(EnvToken::EOF);
@@ -62,10 +62,10 @@ fn parse_dot_env(tokens: Vec<EnvToken>) -> Result<EnvMap, String> {
                 character_counter += 1;
                 if !in_a_comment {
                     if expecting_key {
-                        current_key.push_str(&c);
+                        current_key.push(c);
                         continue;
                     } else if expecting_value {
-                        current_value.push_str(&c);
+                        current_value.push(c);
                         continue;
                     } else if !expecting_value {
                         // this case is when we finish parsing a value but get another character
@@ -84,6 +84,12 @@ fn parse_dot_env(tokens: Vec<EnvToken>) -> Result<EnvMap, String> {
                         "expected value but found assignment operator on line {line_counter} character {character_counter}"
                     ));
                 }
+
+                if !current_key.is_empty() && !current_value.is_empty() && encountered_assignment && !in_a_comment {
+                    // this should be modified when we add quoote handling
+                    return Err(format!("encountered assignment operator at line {line_counter} character {character_counter}"))
+                }
+
                 if !in_a_comment {
                     encountered_assignment = true;
                 }
@@ -95,11 +101,15 @@ fn parse_dot_env(tokens: Vec<EnvToken>) -> Result<EnvMap, String> {
                 character_counter += 1;
             }
             EnvToken::Whitespace => {
+                character_counter = character_counter + 1;
                 if in_a_comment {
                     continue;
                 }
+                if current_key.is_empty() && expecting_key {
+                    return Err(format!("expected key or comment symbol but encountered whitespace at line {line_counter} character {character_counter}"))
+                }
                 if expecting_key {
-                    return Err(format!("expected key but encountered whitespace"));
+                    return Err(format!("expected key or assignment operator but encountered whitespace at line {line_counter} character {character_counter}"));
                 }
                 if expecting_value {
                     expecting_value = false;

@@ -32,7 +32,7 @@ Once the input is lexed, it can be parsed. This involves making sure that the to
 In my lexing function, I read the contents into the following tokens, using Rust's enums:
 ```Rust
 enum EnvToken {
-    Character(String),
+    Character(char),
     AssignmentOperator,
     NewLine,
     EOF,
