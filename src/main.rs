@@ -1,0 +1,201 @@
+use std::collections::HashMap;
+use std::fs;
+
+fn main() {
+    let contents = fs::read_to_string("Test.env").expect("unable to read file");
+    let new_env_map: HashMap<String, String> = process_dot_env(contents).expect("unable to parse env file");
+    for (k, v) in new_env_map.iter() {
+        println!("{} : {}", k, v);
+    }
+}
+
+// this and the the below type may be superflouous
+type EnvVar = String;
+
+type EnvVal = String;
+
+// if the above are not needed then change this to EnvMap = HashMap<String, String>
+type EnvMap = HashMap<EnvVar, EnvVal>;
+
+#[derive(Debug)]
+enum EnvToken {
+    Character(String),
+    AssignmentOperator,
+    NewLine,
+    EOF,
+    Comment,
+    Whitespace,
+}
+
+/// tokenizes the given `.env` file into a Vec of Tokens
+fn lex_dot_env(file_contents: String) -> Vec<EnvToken> {
+    let mut token_vec: Vec<EnvToken> = Vec::new();
+    for char in file_contents.chars() {
+        match char {
+            '=' => token_vec.push(EnvToken::AssignmentOperator),
+            ' ' => token_vec.push(EnvToken::Whitespace),
+            '#' => token_vec.push(EnvToken::Comment),
+            '\n' => token_vec.push(EnvToken::NewLine),
+            _ => token_vec.push(EnvToken::Character(char.to_string())),
+        }
+    }
+    token_vec.push(EnvToken::EOF);
+    return token_vec;
+}
+
+/// reads the Vec of Tokens into a valid EnvMap and returns an error
+/// for specific errors
+fn parse_dot_env(tokens: Vec<EnvToken>) -> Result<EnvMap, String> {
+    let mut new_env_map: EnvMap = EnvMap::new();
+    let mut line_counter: i64 = 1;
+    let mut character_counter: i64 = 1;
+    let mut current_key = EnvVar::new();
+    let mut current_value = EnvVal::new();
+    let mut expecting_key = true;
+    let mut expecting_value = false;
+    let mut in_a_comment = false;
+    let mut encountered_assignment = false;
+
+    for token in tokens {
+        match token {
+            EnvToken::Character(c) => {
+                character_counter += 1;
+                if !in_a_comment {
+                    if expecting_key {
+                        current_key.push_str(&c);
+                        continue;
+                    } else if expecting_value {
+                        current_value.push_str(&c);
+                        continue;
+                    } else if !expecting_value {
+                        // this case is when we finish parsing a value but get another character
+                        return Err(format!("encountered unexpected token, expected comment or new line at line {line_counter}, character {character_counter}"))
+                    }
+                }
+            }
+            EnvToken::AssignmentOperator => {
+                // this throws an error if we already know we're expecting a value
+                // but we get an '=' sign and not any characters.
+                // but if there's already content in the current value, we know that this equals sign
+                // is in the value itself.
+                // this should be changed though once we account for quotation marks
+                if !expecting_key && current_value.is_empty() {
+                    return Err(format!(
+                        "expected value but found assignment operator on line {line_counter} character {character_counter}"
+                    ));
+                }
+                if !in_a_comment {
+                    encountered_assignment = true;
+                }
+                if in_a_comment {
+                    encountered_assignment = false;
+                }
+                expecting_key = false;
+                expecting_value = true;
+                character_counter += 1;
+            }
+            EnvToken::Whitespace => {
+                if in_a_comment {
+                    continue;
+                }
+                if expecting_key {
+                    return Err(format!("expected key but encountered whitespace"));
+                }
+                if expecting_value {
+                    expecting_value = false;
+                }
+            }
+            EnvToken::Comment => {
+                in_a_comment = true;
+            }
+            EnvToken::NewLine => {
+                // if there is not key or value, and if there's no assignment operator,
+                // then just reset and continue
+                if (current_key.is_empty() && current_value.is_empty()) && !encountered_assignment {
+                    expecting_key = true;
+                    expecting_value = false;
+                    current_key.clear();
+                    current_value.clear();
+                    line_counter = line_counter + 1;
+                    in_a_comment = false;
+                    character_counter = 0;
+                    encountered_assignment = false;
+                    continue;
+                }
+
+                // if there's an assignment operator but not key and value, throw an error
+                if encountered_assignment {
+                    if current_key.is_empty() {
+                        return Err(format!("expected key for line {line_counter}"));
+                    };
+                    if current_value.is_empty() {
+                        return Err(format!("expected value for line {line_counter}"));
+                    };
+                }
+
+                if (!current_key.is_empty() && current_value.is_empty()) && encountered_assignment {
+                    return Err(format!("expected assignment and value but only found key on line {line_counter}"));
+                }
+
+
+                // we have a few things to do on the new line token
+                // first, check whether the key and value are not empty strings
+                // if either is empty, throw an error and report the line
+                // on which the error occured
+                if (current_key.is_empty() && !current_value.is_empty())
+                    || (!current_key.is_empty() && current_value.is_empty())
+                {
+                    // throw error
+                    // this 'or' condition could be broken up into multiple error returns though
+                    return Err(format!("key or value is missing on line {line_counter}"));
+                }
+
+                if !current_key.is_empty() && !current_value.is_empty() {
+                    // if there is no error,
+                    // add the key and value to the map (remember to clone)
+                    new_env_map.insert(current_key.clone(), current_value.clone());
+                }
+
+                // and then reset the state to expect a key
+                expecting_key = true;
+                expecting_value = false;
+                current_key.clear();
+                current_value.clear();
+                in_a_comment = false;
+                line_counter = line_counter + 1;
+                character_counter = 0;
+                encountered_assignment = false;
+                // and not expect a value,
+                // and the line_character counter
+                // as well as calling the .clear() method on
+                // each of those strings
+            }
+            EnvToken::EOF => {
+                // todo fix this next
+                break;
+            }
+        }
+    }
+
+    return Ok(new_env_map);
+}
+
+pub fn process_dot_env(file_contents: String) -> Result<HashMap<String, String>, String> {
+    return parse_dot_env(lex_dot_env(file_contents))
+}
+
+/*
+The Lexer turns the .env file into a Vec of tokens. The parser then works on
+determinng whether the vec has a valid syntax.
+
+The basic syntax flow is as follows:
+Line Start -> Key
+Line Start -> Comment
+Key -> AssignmentOperator
+AssignmentOperator -> Value
+Value -> NewLine
+Value -> Comment
+Value -> Whitespace
+Value -> EOF
+
+*/
