@@ -102,6 +102,66 @@ I enjoyed this project and may try to build other lexers and parsers with Rust d
 
 As I am learning, if I've said anything incorrect, please feel free to make an issue of the issue tracker.
 
+# Addendum 1: Error Types
+
+After implementing the core parsing, it was pointed out that I'm not really returning real error types, but just strings that contain error information. Instead, it's more idiomatic to enumerate (more enums!) the variety of errors that one might encounter while parsing the tokens. These are the errors that I implemented:
+```Rust
+pub enum EnvError {
+    UnexpectedToken {
+        expected: String,
+        found: String,
+        line: i64,
+        character: i64,
+    },
+    MissingAssignmentOperator {
+        key: String,
+        line: i64,
+        character: i64,
+    },
+    ExpectedValueButFoundAssignment {
+        line: i64,
+        character: i64,
+    },
+    MissingKey {
+        line: i64,
+    },
+    MissingValue {
+        line: i64,
+    },
+    FoundOnlyKey {
+        line: i64,
+    },
+}
+```
+Now, those errors can still carry the important information that I was packing into the string (namely the position of where an error was enountered like 'line 2, character 3') by implementing the `fmt::Display` trait. This looks like:
+```Rust
+impl fmt::Display for EnvError {
+fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    match self {
+        EnvError::UnexpectedToken {
+            expected,
+            found,
+            line,
+            character,
+        } => write!(
+            f,
+            "Unexpected token: expected {expected} but found '{found}' at line {line}, character {character}",
+        ),
+        ...
+        ...
+```
+Where the parser returns those errors like:
+```Rust
+...
+return Err(EnvError::UnexpectedToken {
+    expected: "comment of new line".to_string(),
+    found: c.to_string(),
+    line: line_counter,
+    character: character_counter,
+});
+```
+Now, we're preserving the valuable debugging information for the developer, gaining control over our error state, and still formatting custom string debugging messages. Coming from doing a lot of Go programming recently, I never knew enums could be so powerful!
+
 ### Artificial Intelligence
 
 Although I hand-wrote all of the code, as I am still learning, I used large language models to help me understand some of the syntax of Rust.
